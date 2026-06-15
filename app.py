@@ -1,79 +1,151 @@
 import streamlit as st
-from google import genai
-from google.genai import types
-from google.genai.errors import APIError
+import google.generativeai as genai
 
-# 1. 페이지 설정 및 제목
-st.set_page_config(page_title="내일의 나: 고등학생 진로 상담소", page_icon="🌱", layout="centered")
-st.title("🌱 내일의 나: 진로 상담 챗봇")
-st.caption("아직 하고 싶은 일을 찾지 못해 고민인가요? 함께 이야기 나누며 길을 찾아봐요.")
+st.set_page_config(
+    page_title="AI 융합 탐구 주제 설계소",
+    page_icon="🎓",
+    layout="wide"
+)
 
-# 2. Streamlit Secrets에서 API 키 불러오기 및 클라이언트 초기화
-try:
-    # streamlit 공식 가이드에 따라 st.secrets에서 키를 가져옵니다.
-    api_key = st.secrets["GEMINI_API_KEY"]
-    client = genai.Client(api_key=api_key)
-except KeyError:
-    st.error("🔑 Streamlit Secrets에 'GEMINI_API_KEY'가 설정되지 않았습니다. 설정 후 다시 시도해주세요.")
+st.title("🎓 AI 융합 탐구 주제 설계소")
+st.markdown(
+    """
+관심사를 여러 개 입력하면 AI가 이를 융합하여  
+고등학교 생활기록부에 활용 가능한 탐구 주제를 제안합니다.
+"""
+)
+
+# API 설정
+api_key = st.secrets.get("GEMINI_API_KEY", "")
+
+if not api_key:
+    st.error("GEMINI_API_KEY가 설정되지 않았습니다.")
     st.stop()
 
-# 3. 세션 상태(Session State)로 채팅 기록 초기화
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+try:
+    genai.configure(api_key=api_key)
+except Exception as e:
+    st.error(f"API 설정 오류: {e}")
+    st.stop()
 
-# 4. 이전 대화 기록 화면에 출력
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# 입력 영역
+interest_text = st.text_area(
+    "관심사를 쉼표(,)로 구분하여 입력하세요",
+    placeholder="예: 인공지능, 심리학, 환경, 스포츠"
+)
 
-# 5. 사용자 입력 받기
-if prompt := st.chat_input("고민이나 관심사가 있다면 편하게 말해주세요. (예: 어떤 과목을 좋아해, 요즘 관심 있는 것 등)"):
-    
-    # 사용자 메시지 화면에 표시 및 세션 저장
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+departments = [
+    "자유 선택",
+    "컴퓨터공학과",
+    "의예과",
+    "심리학과",
+    "경영학과",
+    "교육학과",
+    "법학과",
+    "경제학과",
+    "생명과학과",
+    "기계공학과",
+    "전자공학과",
+    "화학과",
+    "물리학과",
+    "간호학과",
+    "미디어학과",
+    "디자인학과"
+]
 
-    # 6. Gemini 모델을 통한 답변 생성 및 예외 처리
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        
-        # 모델 설정 및 페르소나(System Instruction) 부여
-        config = types.GenerateContentConfig(
-            system_instruction=(
-                "당신은 진로가 없어 고민하는 고등학생을 돕는 따뜻하고 공감 능력이 뛰어난 진로 상담사입니다. "
-                "학생의 말에 깊이 공감해주고, 다정하며 친근한 말투(해요체)를 사용하세요. "
-                "직업을 바로 정해주기보다는 학생이 좋아하는 과목, 취미, 관심사, 사소한 습관 등을 질문하며 "
-                "스스로 장점과 흥미를 발견할 수 있도록 대화를 유도해주세요. 절대 다그치거나 딱딱하게 답변하지 마세요."
-            ),
-            temperature=0.7,
+department = st.selectbox(
+    "희망 학과 선택",
+    departments
+)
+
+difficulty = st.selectbox(
+    "탐구 수준",
+    ["고등학교 1학년", "고등학교 2학년", "고등학교 3학년"]
+)
+
+generate = st.button("🚀 탐구 주제 생성")
+
+if generate:
+
+    if not interest_text.strip():
+        st.warning("관심사를 입력해주세요.")
+        st.stop()
+
+    interests = [
+        x.strip()
+        for x in interest_text.split(",")
+        if x.strip()
+    ]
+
+    interest_string = ", ".join(interests)
+
+    prompt = f"""
+너는 대한민국 고등학교 진로·진학 전문 탐구 설계 AI이다.
+
+학생 관심사:
+{interest_string}
+
+희망 학과:
+{department}
+
+학생 수준:
+{difficulty}
+
+조건:
+
+1. 관심사를 모두 반영한다.
+2. 학과와 연계한다.
+3. 고등학교 생활기록부에 적합해야 한다.
+4. 실제 수행 가능한 탐구여야 한다.
+5. 너무 추상적이면 안 된다.
+6. 창의적인 융합형 주제를 제안한다.
+
+다음 형식으로 작성하라.
+
+# 탐구 주제
+
+# 주제 선정 이유
+
+# 연구 질문
+
+# 탐구 방법
+
+# 기대 효과
+
+# 진로 연계성
+
+추가로
+
+# 확장 탐구 아이디어
+
+도 제안하라.
+"""
+
+    try:
+        model = genai.GenerativeModel(
+            "gemini-2.5-flash-lite"
         )
-        
-        # 이전 대화 맥락을 Gemini가 이해할 수 있는 형태로 변환
-        contents = []
-        for msg in st.session_state.messages:
-            role = "user" if msg["role"] == "user" else "model"
-            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
-        
-        try:
-            with st.spinner("생각 중... 🌱"):
-                # 최신 대화 답변 요청 (gemini-2.5-flash-lite 사용)
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash-lite',
-                    contents=contents,
-                    config=config
-                )
-                
-                # 결과 출력 및 세션 저장
-                assistant_response = response.text
-                message_placeholder.markdown(assistant_response)
-                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
-                
-        except APIError as e:
-            # Gemini API 관련 오류 처리
-            error_msg = f"⚠️ Gemini API 오류가 발생했습니다: {e.message}"
-            message_placeholder.markdown(error_msg)
-        except Exception as e:
-            # 기타 일반 오류 처리
-            error_msg = f"⚠️ 알 수 없는 오류가 발생했습니다: {str(e)}"
-            message_placeholder.markdown(error_msg)
+
+        response = model.generate_content(prompt)
+
+        st.success("탐구 주제가 생성되었습니다.")
+
+        st.markdown(response.text)
+
+    except Exception as e:
+        st.error("AI 생성 중 오류가 발생했습니다.")
+        st.exception(e)
+
+st.divider()
+
+st.subheader("💡 입력 예시")
+
+st.markdown(
+"""
+- 인공지능, 환경, 스포츠
+- 심리학, 게임, 데이터분석
+- 경제, 기후변화, 정책
+- 의학, AI, 생명과학
+- 교육, 메타버스, 심리학
+"""
+)
